@@ -1,4 +1,3 @@
-#!/opt/homebrew/bin/python3
 import subprocess
 import os
 import time
@@ -23,6 +22,7 @@ def parse_arguments():
     parser.add_argument("--llama-server", type=str, default="/opt/homebrew/bin/llama-server", help="Path to llama-server executable.")
     parser.add_argument("--wsg-port", type=int, default=8080, help="Port for the FastAPI Gateway (WSG).")
     parser.add_argument("--wsg-bind", type=str, default="localhost", help="Bind address for the FastAPI Gateway.")
+    parser.add_argument("--llama-bind", type=str, default="localhost", help="Bind address for the Llama Server.")
     parser.add_argument("--llama-port", type=int, default=8000, help="Port for llama.cpp server.")
     parser.add_argument("--timeout", type=int, default=900, help="Inactivity timeout in seconds (-1 for no timeout).")
     return parser.parse_args()
@@ -49,7 +49,7 @@ def start_llama_server(model_name: str):
 
     print(f"Starting llama.cpp server with model: {model_name}")
     llama_process = subprocess.Popen(
-        [args.llama_server, "-m", model_path, "-t", "4", "-ngl", "100", "--no-webui", "--port", str(args.llama_port)],
+        [args.llama_server, "-m", model_path, "-t", "4", "-ngl", "100", "--no-webui", "--port", str(args.llama_port), "--host", str(args.llama_bind)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.STDOUT
     )
@@ -68,11 +68,13 @@ def stop_llama_server():
         llama_process = None
         current_model = None
 
-def update_url_port(request_url: str, new_port: int) -> str:
-    """Updates the port in the URL while keeping the path and parameters."""
+def update_url(request_url: str, new_port: int, new_host: str) -> str:
+    """Updates the host and the port in the URL while keeping the path and parameters."""
     parsed_url = urlparse(request_url)
-    updated_netloc = f"{parsed_url.hostname}:{new_port}"
+    updated_netloc = f"{new_host}:{new_port}"
     return urlunparse(parsed_url._replace(netloc=updated_netloc))
+
+
 
 async def stream_response(url, method, headers, content):
     """Streaming response from the llama.cpp server."""
@@ -84,6 +86,7 @@ async def stream_response(url, method, headers, content):
     except httpx.ReadTimeout:
         print("Error: Read timeout while streaming response.")
         yield b'{"error": "Read timeout occurred"}'
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -136,7 +139,7 @@ async def proxy_request(request: Request):
             return {"error": str(e)}
 
     # Proxying the request
-    target_url = update_url_port(str(request.url), args.llama_port)
+    target_url = update_url(str(request.url), args.llama_port, args.llama_bind)
     return StreamingResponse(
         stream_response(target_url, request.method, request.headers, await request.body()),
         media_type="application/json",
