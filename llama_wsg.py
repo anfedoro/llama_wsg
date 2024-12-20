@@ -130,9 +130,12 @@ async def proxy_request(request: Request):
     except Exception:
         body = None
 
-    model_name = request.headers.get("x-model")
+    model_name = request.headers.get("x-model", None)
     if not model_name:
-        return {"error":"'x-model' HTTP header is required in the request"}
+        model_name = body.get("model", None)
+
+    if not model_name:
+        return {"error":"'x-model' HTTP header or 'model' JSON parameter is required in the request"}
 
     # Updating the last activity time
     last_activity_time = time.time()
