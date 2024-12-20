@@ -80,14 +80,14 @@ async def stream_response(url, method, headers, content):
     """Streaming response from the llama.cpp server."""
     try:
         async with client.stream(method, url, headers=headers, content=content) as response:
-            # Проверка типа содержимого
+            # Check a content
             content_type = response.headers.get("content-type", "")
             if content_type == "text/event-stream":
-                # Отправляем потоковые данные
+                # Sending streamed data
                 async for chunk in response.aiter_bytes():
                     yield chunk
             else:
-                # Если не поток, возвращаем обычный JSON
+                # If not streamed data, just return the response in JSON
                 yield await response.aread()
     except httpx.ReadTimeout:
         print("Error: Read timeout while streaming response.")
@@ -147,7 +147,7 @@ async def proxy_request(request: Request):
     # Proxying the request
     target_url = update_url(str(request.url), args.llama_port, args.llama_bind)
 
-    # Определяем media_type
+    # Define media_type
     media_type = "application/json"
     if "stream" in body and body["stream"]:
         media_type = "text/event-stream"
@@ -155,7 +155,7 @@ async def proxy_request(request: Request):
     return StreamingResponse(
         stream_response(target_url, request.method, request.headers, await request.body()),
         media_type=media_type,
-    )
+        )
 
 if __name__ == "__main__":
     import uvicorn
